@@ -17,7 +17,7 @@ export function validateToken(token) {
       };
     }
 
-    const payload = decoded.payload;
+    const { payload } = decoded;
     const now = Math.floor(Date.now() / 1000);
 
     // Check expiration
@@ -32,22 +32,11 @@ export function validateToken(token) {
 
     // Calculate time until expiration
     const expiresAt = payload.exp ? new Date(payload.exp * 1000) : null;
-    const expiresInDays = payload.exp ? Math.floor((payload.exp - now) / 86400) : null;
-
-    // Check if token has required scopes (if present)
-    const scopes = payload.scopes || payload.scope?.split(' ') || [];
-    const hasLogRead = scopes.includes('log:read');
-    const hasLogWrite = scopes.includes('log:write');
 
     return {
       valid: true,
       payload,
-      expiresAt,
-      expiresInDays,
-      scopes,
-      hasLogRead,
-      hasLogWrite,
-      hasRequiredScopes: hasLogRead && hasLogWrite
+      expiresAt
     };
   } catch (error) {
     return {

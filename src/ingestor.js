@@ -10,13 +10,15 @@ export async function sendMediaLogBatch(org, repo, ref, entries, token, dryRun =
   }
 
   const url = `${MEDIALOG_API}/${org}/${repo}/${ref}/`;
-  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-  
+  const sleep = (ms) => new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `token ${token}`,
+        Authorization: `token ${token}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ entries })
@@ -28,7 +30,7 @@ export async function sendMediaLogBatch(org, repo, ref, entries, token, dryRun =
 
     // Handle rate limiting (403 or 429)
     if ((response.status === 403 || response.status === 429) && attempt < maxRetries) {
-      const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+      const backoffMs = 2 ** attempt * 1000; // 1s, 2s, 4s
       await sleep(backoffMs);
       continue;
     }
@@ -37,14 +39,17 @@ export async function sendMediaLogBatch(org, repo, ref, entries, token, dryRun =
     const text = await response.text();
     throw new Error(`Media log API error: ${response.status} - ${text}`);
   }
+
+  // This should never be reached due to throw, but ESLint requires it
+  return null;
 }
 
 export async function verifyMediaLog(org, repo, ref, token, limit = 10) {
   const url = `${MEDIALOG_API}/${org}/${repo}/${ref}/?since=5m&limit=${limit}`;
-  
+
   const response = await fetch(url, {
     headers: {
-      'Authorization': `token ${token}`
+      Authorization: `token ${token}`
     }
   });
 
@@ -102,7 +107,7 @@ export async function buildPreviewUserMap(org, repo, ref, token, verbose = false
     let totalEntries = 0;
 
     if (verbose) {
-      console.log(`\n  Fetching preview logs from last 30 days`);
+      console.log('\n  Fetching preview logs from last 30 days');
       console.log(`  API URL: ${url}`);
     }
 
@@ -110,60 +115,43 @@ export async function buildPreviewUserMap(org, repo, ref, token, verbose = false
     while (hasMore) {
       const response = await fetch(url, {
         headers: {
-          'Authorization': `token ${token}`
+          Authorization: `token ${token}`
         }
       });
 
-      if (verbose) {
-        console.log(`\n  Response status: ${response.status} ${response.statusText}`);
-        console.log(`  Response headers:`, Object.fromEntries(response.headers.entries()));
-      }
-
       if (!response.ok) {
-        const responseText = await response.text();
         if (verbose) {
+          const responseText = await response.text();
+          const errorHeader = response.headers.get('x-error');
           console.log(`  ✗ Log API error: ${response.status}`);
-          console.log(`  Response body:`, responseText);
-        }
-        
-        // Special handling for 403 - permission issue
-        if (response.status === 403) {
-          if (verbose) {
-            console.log(`\n  ⚠️  403 Forbidden - Token doesn't have access to log API`);
-            console.log(`  This token may lack 'log:read' permissions for ${org}/${repo}`);
-            console.log(`  User mapping will not be available for this repository\n`);
+          if (errorHeader) {
+            console.log(`  Error: ${errorHeader}`);
+          } else if (responseText) {
+            console.log(`  Response: ${responseText}`);
           }
+        }
+
+        // Special handling for 403 - permission issue
+        if (response.status === 403 && verbose) {
+          console.log(`\n  ⚠️  403 Forbidden - Token lacks 'log:read' permission for ${org}/${repo}`);
+          console.log('  User mapping will not be available\n');
         }
         break;
       }
 
       const data = await response.json();
-      
-      if (verbose && pageCount === 0) {
-        console.log(`\n  Response data structure:`, JSON.stringify(Object.keys(data), null, 2));
-        console.log(`  Full response:`, JSON.stringify(data, null, 2));
-      }
-
       const entries = data.entries || [];
-      pageCount++;
+      pageCount += 1; // eslint-disable-line no-plusplus
       totalEntries += entries.length;
 
       if (verbose && pageCount === 1) {
-        console.log(`\n  Fetched ${entries.length} log entries (page ${pageCount})`);
+        console.log(`\n  Fetched ${entries.length} log entries`);
         if (entries.length > 0) {
-          console.log(`\n  First entry keys:`, Object.keys(entries[0]));
-          console.log(`  First 3 entries:`, JSON.stringify(entries.slice(0, 3), null, 2));
+          const uniqueRoutes = [...new Set(entries.map((e) => e.route))];
+          const entriesWithUser = entries.filter((e) => e.user).length;
+          console.log(`  Unique routes: ${uniqueRoutes.join(', ')}`);
+          console.log(`  Entries with user info: ${entriesWithUser}/${entries.length}`);
         }
-      }
-
-      // Process entries (newest first) - only update map if path not yet seen
-      if (verbose && pageCount === 1 && entries.length > 0) {
-        const uniqueRoutes = [...new Set(entries.map(e => e.route))];
-        console.log(`\n  Unique routes found in entries:`, uniqueRoutes);
-        const entriesWithUser = entries.filter(e => e.user).length;
-        const entriesWithPath = entries.filter(e => e.path).length;
-        console.log(`  Entries with 'user' field: ${entriesWithUser}/${entries.length}`);
-        console.log(`  Entries with 'path' field: ${entriesWithPath}/${entries.length}`);
       }
 
       for (const entry of entries) {
@@ -179,7 +167,7 @@ export async function buildPreviewUserMap(org, repo, ref, token, verbose = false
       if (data.links?.next) {
         url = data.links.next;
         if (verbose && pageCount === 1) {
-          console.log(`  More pages available, continuing...`);
+          console.log('  More pages available, continuing...');
         }
       } else {
         hasMore = false;
@@ -191,7 +179,7 @@ export async function buildPreviewUserMap(org, repo, ref, token, verbose = false
       console.log(`  Found preview users for ${userMap.size} unique paths`);
       if (userMap.size > 0) {
         const samplePaths = Array.from(userMap.entries()).slice(0, 3);
-        console.log(`  Sample mappings:`);
+        console.log('  Sample mappings:');
         samplePaths.forEach(([path, user]) => {
           console.log(`    ${path} -> ${user}`);
         });
@@ -246,12 +234,12 @@ export async function enrichEntriesWithUser(entries, org, repo, ref, token, fall
 
         if (user) {
           enriched.user = user;
-          foundUsers++;
+          foundUsers += 1; // eslint-disable-line no-plusplus
         } else if (fallbackUser) {
           enriched.user = fallbackUser;
-          usedFallback++;
+          usedFallback += 1; // eslint-disable-line no-plusplus
         } else {
-          noUser++;
+          noUser += 1; // eslint-disable-line no-plusplus
         }
       } else {
         if (verbose && index < 3) {
@@ -259,26 +247,24 @@ export async function enrichEntriesWithUser(entries, org, repo, ref, token, fall
         }
         if (fallbackUser) {
           enriched.user = fallbackUser;
-          usedFallback++;
+          usedFallback += 1; // eslint-disable-line no-plusplus
         } else {
-          noUser++;
+          noUser += 1; // eslint-disable-line no-plusplus
         }
       }
-    } else {
+    } else if (fallbackUser) {
       // No sourcePath (standalone media), use fallback user
-      if (fallbackUser) {
-        enriched.user = fallbackUser;
-        usedFallback++;
-      } else {
-        noUser++;
-      }
+      enriched.user = fallbackUser;
+      usedFallback += 1; // eslint-disable-line no-plusplus
+    } else {
+      noUser += 1; // eslint-disable-line no-plusplus
     }
 
     return enriched;
   });
 
   if (verbose) {
-    console.log(`\n  User enrichment summary:`);
+    console.log('\n  User enrichment summary:');
     console.log(`    Found from preview logs: ${foundUsers}`);
     console.log(`    Used fallback user: ${usedFallback}`);
     console.log(`    No user assigned: ${noUser}`);

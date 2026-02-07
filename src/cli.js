@@ -14,7 +14,9 @@ import {
   isMediaFile
 } from './discovery.js';
 import { extractMediaReferences, batchEntries } from './parser.js';
-import { sendMediaLogBatch, saveFailedBatch, generateReport, verifyMediaLog, enrichEntriesWithUser } from './ingestor.js';
+import {
+  sendMediaLogBatch, saveFailedBatch, generateReport, verifyMediaLog, enrichEntriesWithUser
+} from './ingestor.js';
 import { validateToken } from './token-manager.js';
 
 dotenv.config();
@@ -135,7 +137,7 @@ async function runUserMappingTest(org, repo, ref, path, token, pollInterval, ver
     spinner.succeed(`Job created: ${chalk.cyan(jobId)}`);
 
     spinner.start('Polling job status...');
-    await pollJobStatus(jobUrl, token, parseInt(pollInterval), (progress) => {
+    await pollJobStatus(jobUrl, token, parseInt(pollInterval, 10), (progress) => {
       if (verbose) {
         spinner.text = `Processing: ${progress.processed}/${progress.total} pages`;
       }
@@ -147,9 +149,9 @@ async function runUserMappingTest(org, repo, ref, path, token, pollInterval, ver
     spinner.succeed(`Discovered ${chalk.cyan(resources.length)} resources`);
 
     const processableResources = resources.filter(shouldProcessResource);
-    const markdownCount = processableResources.filter(r => !isMediaFile(r.path)).length;
-    const mediaCount = processableResources.filter(r => isMediaFile(r.path)).length;
-    
+    const markdownCount = processableResources.filter((r) => !isMediaFile(r.path)).length;
+    const mediaCount = processableResources.filter((r) => isMediaFile(r.path)).length;
+
     console.log(chalk.gray(`\nFound ${markdownCount} markdown pages and ${mediaCount} standalone media files`));
 
     spinner.start('Building preview user map from logs...');
@@ -165,8 +167,8 @@ async function runUserMappingTest(org, repo, ref, path, token, pollInterval, ver
     console.log(chalk.white(`  - Markdown pages:             ${markdownCount}`));
     console.log(chalk.white(`  - Standalone media:           ${mediaCount}`));
     console.log(chalk.cyan(`Paths with user mapping:        ${userMap.size}`));
-    
-    const coveragePercent = processableResources.length > 0 
+
+    const coveragePercent = processableResources.length > 0
       ? ((userMap.size / markdownCount) * 100).toFixed(1)
       : 0;
     console.log(chalk.cyan(`Coverage for markdown pages:    ${coveragePercent}%`));
@@ -176,11 +178,11 @@ async function runUserMappingTest(org, repo, ref, path, token, pollInterval, ver
     if (userMap.size > 0) {
       console.log(chalk.blue.bold('Sample Path → User Mappings:\n'));
       const samples = Array.from(userMap.entries()).slice(0, 10);
-      samples.forEach(([path, user]) => {
-        console.log(chalk.gray(`  ${path}`));
+      samples.forEach(([pagePath, user]) => {
+        console.log(chalk.gray(`  ${pagePath}`));
         console.log(chalk.green(`    → ${user}\n`));
       });
-      
+
       if (userMap.size > 10) {
         console.log(chalk.gray(`  ... and ${userMap.size - 10} more mappings\n`));
       }
@@ -191,7 +193,7 @@ async function runUserMappingTest(org, repo, ref, path, token, pollInterval, ver
       console.log(chalk.gray('  - Preview logs don\'t contain user information'));
       console.log(chalk.gray('  - The token lacks log:read permissions (403 error)'));
       console.log(chalk.gray('  - The token is for a different org/repo\n'));
-      
+
       console.log(chalk.cyan('💡 Required Permissions:'));
       console.log(chalk.gray('  - Token needs ') + chalk.white('log:read') + chalk.gray(' permission'));
       console.log(chalk.gray('  - Part of "author" role or higher in AEM'));
@@ -204,7 +206,6 @@ async function runUserMappingTest(org, repo, ref, path, token, pollInterval, ver
 
     console.log(chalk.green('✓ User mapping test completed\n'));
     process.exit(0);
-
   } catch (error) {
     spinner.fail('Error');
     console.error(chalk.red(`\n✗ ${error.message}\n`));
@@ -246,13 +247,20 @@ async function runIngest(options) {
       const hoursLeft = Math.floor(msLeft / (1000 * 60 * 60));
 
       if (daysLeft < 1) {
-        console.log(chalk.yellow(`⚠️  Token expires in ${hoursLeft} hours (${validation.expiresAt.toLocaleString()})\n`));
+        console.log(chalk.yellow(
+          `⚠️  Token expires in ${hoursLeft} hours (${validation.expiresAt.toLocaleString()})\n`
+        ));
       } else if (daysLeft < 7) {
-        console.log(chalk.yellow(`⚠️  Token expires in ${daysLeft} days (${validation.expiresAt.toLocaleDateString()})\n`));
+        console.log(chalk.yellow(
+          `⚠️  Token expires in ${daysLeft} days (${validation.expiresAt.toLocaleDateString()})\n`
+        ));
       }
     }
-    const { org, repo, ref, path, user, dryRun, verify, skipUserEnrichment, concurrency, batchSize, pollInterval, verbose, userMapping } = options;
-    
+    const {
+      org, repo, ref, path, user, dryRun, verify, skipUserEnrichment,
+      concurrency, batchSize, pollInterval, verbose, userMapping
+    } = options;
+
     // User mapping test mode - skip parsing/sending, just test user mapping
     if (userMapping) {
       await runUserMappingTest(org, repo, ref, path, token, pollInterval, verbose);
@@ -278,7 +286,7 @@ async function runIngest(options) {
     spinner.succeed(`Job created: ${chalk.cyan(jobId)}`);
 
     spinner.start('Polling job status...');
-    await pollJobStatus(jobUrl, token, parseInt(pollInterval), (progress) => {
+    await pollJobStatus(jobUrl, token, parseInt(pollInterval, 10), (progress) => {
       if (verbose) {
         spinner.text = `Processing: ${progress.processed}/${progress.total} pages`;
       }
@@ -291,17 +299,17 @@ async function runIngest(options) {
     spinner.succeed(`Discovered ${chalk.cyan(resources.length)} resources`);
 
     const processableResources = resources.filter(shouldProcessResource);
-    const markdownCount = processableResources.filter(r => !isMediaFile(r.path)).length;
-    const mediaCount = processableResources.filter(r => isMediaFile(r.path)).length;
+    const markdownCount = processableResources.filter((r) => !isMediaFile(r.path)).length;
+    const mediaCount = processableResources.filter((r) => isMediaFile(r.path)).length;
     console.log(chalk.gray(`Processing ${markdownCount} markdown pages and ${mediaCount} standalone media files...\n`));
 
-    const queue = new PQueue({ concurrency: parseInt(concurrency) });
+    const queue = new PQueue({ concurrency: parseInt(concurrency, 10) });
     const allEntries = [];
 
     spinner.start('Fetching and parsing markdown files...');
-    
+
     await queue.addAll(
-      processableResources.map(resource => async () => {
+      processableResources.map((resource) => async () => {
         try {
           if (isMediaFile(resource.path)) {
             const entry = {
@@ -311,7 +319,7 @@ async function runIngest(options) {
 
             // Don't add user here - will be enriched later
             allEntries.push(entry);
-            stats.standaloneMediaFound++;
+            stats.standaloneMediaFound += 1; // eslint-disable-line no-plusplus
 
             if (verbose) {
               console.log(chalk.gray(`  ${resource.path}: standalone media`));
@@ -320,7 +328,7 @@ async function runIngest(options) {
             const markdown = await fetchMarkdown(org, repo, ref, resource.path, token);
             const entries = extractMediaReferences(markdown, resource.path, org, repo, ref);
 
-            stats.markdownPagesProcessed++;
+            stats.markdownPagesProcessed += 1; // eslint-disable-line no-plusplus
 
             if (entries.length > 0) {
               allEntries.push(...entries);
@@ -328,14 +336,14 @@ async function runIngest(options) {
 
               if (verbose) {
                 console.log(chalk.gray(`  ${resource.path}: ${entries.length} media from markdown`));
-                entries.forEach(entry => {
+                entries.forEach((entry) => {
                   console.log(chalk.gray(`    - ${entry.path}`));
                 });
               }
             }
           }
         } catch (error) {
-          stats.errors++;
+          stats.errors += 1; // eslint-disable-line no-plusplus
           if (verbose) {
             console.error(chalk.red(`  ✗ ${resource.path}: ${error.message}`));
           }
@@ -343,7 +351,9 @@ async function runIngest(options) {
       })
     );
 
-    spinner.succeed(`Parsed ${stats.markdownPagesProcessed} markdown pages, found ${stats.standaloneMediaFound} standalone media`);
+    spinner.succeed(
+      `Parsed ${stats.markdownPagesProcessed} markdown pages, found ${stats.standaloneMediaFound} standalone media`
+    );
     stats.totalMediaFound = allEntries.length;
 
     if (allEntries.length === 0) {
@@ -351,7 +361,9 @@ async function runIngest(options) {
       return;
     }
 
-    console.log(chalk.green(`\n✓ Total media: ${allEntries.length} (${stats.standaloneMediaFound} standalone + ${stats.mediaFromMarkdown} from markdown)`));
+    console.log(chalk.green(
+      `\n✓ Total media: ${allEntries.length} (${stats.standaloneMediaFound} standalone + ${stats.mediaFromMarkdown} from markdown)`
+    ));
 
     // Enrich entries with user information from preview logs
     if (!dryRun && !skipUserEnrichment) {
@@ -361,49 +373,58 @@ async function runIngest(options) {
         allEntries.length = 0;
         allEntries.push(...enrichedEntries);
 
-        const entriesWithUsers = enrichedEntries.filter(e => e.user).length;
+        const entriesWithUsers = enrichedEntries.filter((e) => e.user).length;
         if (entriesWithUsers > 0) {
           spinner.succeed(`Enriched entries (${entriesWithUsers}/${allEntries.length} have user info)`);
         } else {
-          spinner.warn(`User enrichment completed but no users found (check token permissions)`);
+          spinner.warn('User enrichment completed but no users found (check token permissions)');
         }
       } catch (error) {
         spinner.warn(`User enrichment failed: ${error.message}`);
         console.log(chalk.yellow('\n  ⚠️  Continuing without user information...\n'));
       }
     } else if (skipUserEnrichment) {
-      console.log(chalk.gray('\n⏭️  Skipping user enrichment (--skip-user-enrichment flag set)\n'));
+      console.log(chalk.gray(
+        '\n⏭️  Skipping user enrichment (--skip-user-enrichment flag set)\n'
+      ));
     }
 
-    const batches = batchEntries(allEntries, Math.min(parseInt(batchSize), 10));
+    const batches = batchEntries(allEntries, Math.min(parseInt(batchSize, 10), 10));
     console.log(chalk.gray(`Sending ${batches.length} batches...\n`));
-    console.log(chalk.yellow(`⏱️  Rate limit: 10 requests per second (estimated time: ~${Math.ceil(batches.length / 10)} seconds)\n`));
+    const estimatedTime = Math.ceil(batches.length / 10);
+    console.log(chalk.yellow(
+      `⏱️  Rate limit: 10 requests per second (estimated time: ~${estimatedTime} seconds)\n`
+    ));
 
     // Wait 2s to let rate limit recover after markdown fetching
     if (!dryRun) {
       console.log(chalk.gray('⏸️  Waiting 2s for rate limit recovery...\n'));
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 2000);
+      });
     }
 
     spinner.start('Sending to media log API...');
-    
-    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-    
+
+    const sleep = (ms) => new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+
     for (const [index, batch] of batches.entries()) {
       try {
         await sendMediaLogBatch(org, repo, ref, batch, token, dryRun);
-        stats.batchesSent++;
-        
+        stats.batchesSent += 1; // eslint-disable-line no-plusplus
+
         if (verbose) {
           spinner.text = `Sent batch ${index + 1}/${batches.length}`;
         }
-        
+
         // Respect rate limit: 10 requests per second = 100ms between requests
         if (index < batches.length - 1 && !dryRun) {
           await sleep(100);
         }
       } catch (error) {
-        stats.errors++;
+        stats.errors += 1; // eslint-disable-line no-plusplus
         await saveFailedBatch(batch, error);
         if (verbose) {
           console.error(chalk.red(`\n  ✗ Batch ${index + 1} failed: ${error.message}`));
@@ -418,10 +439,10 @@ async function runIngest(options) {
       try {
         const result = await verifyMediaLog(org, repo, ref, token, 50);
         spinner.succeed(`Verified ${chalk.cyan(result.count)} recent entries in media log`);
-        
+
         if (verbose && result.entries.length > 0) {
           console.log(chalk.gray('\nRecent entries (sample):'));
-          result.entries.slice(0, 5).forEach(entry => {
+          result.entries.slice(0, 5).forEach((entry) => {
             console.log(chalk.gray(`  ${entry.action} | ${entry.path} | ${entry.sourcePath || 'N/A'}`));
           });
         }
@@ -431,12 +452,11 @@ async function runIngest(options) {
     }
 
     console.log(generateReport(stats));
-    
+
     if (!dryRun && stats.batchesSent > 0) {
-      console.log(chalk.green(`\n✓ Entries successfully sent to media log`));
+      console.log(chalk.green('\n✓ Entries successfully sent to media log'));
       console.log(chalk.gray(`  Query: ${chalk.cyan(`https://admin.hlx.page/medialog/${org}/${repo}/${ref}?limit=100`)}`));
     }
-
   } catch (error) {
     spinner.fail('Error');
     console.error(chalk.red(`\n✗ ${error.message}\n`));

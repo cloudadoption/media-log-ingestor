@@ -4,11 +4,11 @@ const ADMIN_API = 'https://admin.hlx.page';
 
 export async function createBulkStatusJob(org, site, ref, pathFilter, token) {
   const url = `${ADMIN_API}/status/${org}/${site}/${ref}/*`;
-  
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': `token ${token}`,
+      Authorization: `token ${token}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -23,7 +23,7 @@ export async function createBulkStatusJob(org, site, ref, pathFilter, token) {
   }
 
   const data = await response.json();
-  
+
   if (!data.job || data.job.state !== 'created') {
     throw new Error('Job creation failed or returned unexpected state');
   }
@@ -34,13 +34,13 @@ export async function createBulkStatusJob(org, site, ref, pathFilter, token) {
   };
 }
 
-export async function pollJobStatus(jobUrl, token, pollInterval = 10000, onProgress) {
+export async function pollJobStatus(jobUrl, token, pollInterval, onProgress) {
   const response = await fetch(jobUrl, {
     headers: {
-      'Authorization': `token ${token}`
+      Authorization: `token ${token}`
     }
   });
-  
+
   if (!response.ok) {
     throw new Error(`Failed to fetch job status: ${response.status}`);
   }
@@ -52,7 +52,9 @@ export async function pollJobStatus(jobUrl, token, pollInterval = 10000, onProgr
   }
 
   if (state !== 'completed' && state !== 'stopped') {
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
+    await new Promise((resolve) => {
+      setTimeout(resolve, pollInterval);
+    });
     return pollJobStatus(jobUrl, token, pollInterval, onProgress);
   }
 
@@ -63,7 +65,7 @@ export async function getJobDetails(jobUrl, token) {
   const detailsUrl = `${jobUrl}/details`;
   const response = await fetch(detailsUrl, {
     headers: {
-      'Authorization': `token ${token}`
+      Authorization: `token ${token}`
     }
   });
 
@@ -76,14 +78,20 @@ export async function getJobDetails(jobUrl, token) {
 }
 
 export async function fetchMarkdown(org, site, ref, resourcePath, token) {
-  const fetchPath = resourcePath.endsWith('.md') ? resourcePath : 
-                   resourcePath.endsWith('/') ? `${resourcePath}index.md` : `${resourcePath}.md`;
-  
+  let fetchPath;
+  if (resourcePath.endsWith('.md')) {
+    fetchPath = resourcePath;
+  } else if (resourcePath.endsWith('/')) {
+    fetchPath = `${resourcePath}index.md`;
+  } else {
+    fetchPath = `${resourcePath}.md`;
+  }
+
   const url = `${ADMIN_API}/preview/${org}/${site}/${ref}${fetchPath}`;
-  
+
   const response = await fetch(url, {
     headers: {
-      'Authorization': `token ${token}`
+      Authorization: `token ${token}`
     }
   });
 
@@ -109,19 +117,19 @@ const IGNORE_EXTENSIONS = [
 export function isMediaFile(path) {
   if (!path) return false;
   const lowerPath = path.toLowerCase();
-  return MEDIA_EXTENSIONS.some(ext => lowerPath.endsWith(ext));
+  return MEDIA_EXTENSIONS.some((ext) => lowerPath.endsWith(ext));
 }
 
 export function shouldProcessResource(resource) {
   const { path } = resource;
-  
+
   if (!path) {
     return false;
   }
 
   const lowerPath = path.toLowerCase();
-  
-  if (IGNORE_EXTENSIONS.some(ext => lowerPath.endsWith(ext))) {
+
+  if (IGNORE_EXTENSIONS.some((ext) => lowerPath.endsWith(ext))) {
     return false;
   }
 
