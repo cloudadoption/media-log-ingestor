@@ -23,8 +23,8 @@
     "node": ">=18"
   },
   "devDependencies": {
-    "eslint": "^8.57.1",
-    "eslint-config-airbnb-base": "^15.0.0",
-    "eslint-plugin-import": "^2.32.0"
+    "@adobe/eslint-config-helix": "^3.0.17",
+    "@eslint/config-helpers": "^0.5.2",
+    "eslint": "^9.4.0"
   }
 }

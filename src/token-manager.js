@@ -13,7 +13,7 @@ export function validateToken(token) {
     if (!decoded) {
       return {
         valid: false,
-        error: 'Invalid token format'
+        error: 'Invalid token format',
       };
     }
 
@@ -26,7 +26,7 @@ export function validateToken(token) {
         valid: false,
         error: 'Token has expired',
         expired: true,
-        expiresAt: new Date(payload.exp * 1000)
+        expiresAt: new Date(payload.exp * 1000),
       };
     }
 
@@ -36,12 +36,12 @@ export function validateToken(token) {
     return {
       valid: true,
       payload,
-      expiresAt
+      expiresAt,
     };
   } catch (error) {
     return {
       valid: false,
-      error: error.message
+      error: error.message,
     };
   }
 }

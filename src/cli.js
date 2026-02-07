@@ -11,71 +11,17 @@ import {
   getJobDetails,
   fetchMarkdown,
   shouldProcessResource,
-  isMediaFile
+  isMediaFile,
 } from './discovery.js';
 import { extractMediaReferences, batchEntries } from './parser.js';
 import {
-  sendMediaLogBatch, saveFailedBatch, generateReport, verifyMediaLog, enrichEntriesWithUser
+  sendMediaLogBatch, saveFailedBatch, generateReport, verifyMediaLog, enrichEntriesWithUser,
 } from './ingestor.js';
 import { validateToken } from './token-manager.js';
 
 dotenv.config();
 
-const program = new Command();
-
-program
-  .name('logmedia')
-  .version('1.0.0')
-  .description('Retroactively populate AEM media log')
-  .addHelpText('after', `
-Examples:
-  $ logmedia --org myorg --repo myrepo
-  $ logmedia --org myorg --repo myrepo --token YOUR_TOKEN
-  $ logmedia --org myorg --repo myrepo --dry-run --verbose
-  $ logmedia --org myorg --repo myrepo --skip-user-enrichment
-  $ logmedia --org myorg --repo myrepo --user-mapping --verbose
-
-User Enrichment:
-  By default, the tool enriches media entries with user information from preview logs.
-  This requires the token to have 'log:read' permission (part of 'author' role or higher).
-  Use --skip-user-enrichment to disable this feature if your token lacks log permissions.
-
-Getting a token:
-  Run 'logmedia token' for instructions on obtaining an authentication token
-`);
-
-// Token help command
-program
-  .command('token')
-  .description('Show how to get authentication token')
-  .action(() => {
-    showTokenHelp();
-  });
-
-// Main ingest command (default)
-program
-  .command('ingest', { isDefault: true })
-  .description('Ingest media references into AEM media log')
-  .requiredOption('--org <org>', 'Organization name')
-  .requiredOption('--repo <repo>', 'Repository name')
-  .option('--ref <ref>', 'Git reference (branch)', 'main')
-  .option('--path <path>', 'Path filter (e.g., /products/*)', '/*')
-  .option('--token <token>', 'Admin JWT token (or use ADMIN_TOKEN env var)')
-  .option('--user <user>', 'User identifier for log entries')
-  .option('--dry-run', 'Run without sending to API', false)
-  .option('--verify', 'Verify entries after sending', false)
-  .option('--skip-user-enrichment', 'Skip user enrichment from preview logs', false)
-  .option('--concurrency <n>', 'Parallel markdown fetching', '3')
-  .option('--batch-size <n>', 'Entries per batch (max 10)', '10')
-  .option('--poll-interval <ms>', 'Job polling interval', '10000')
-  .option('--verbose', 'Detailed logging', false)
-  .option('--user-mapping', 'Test user mapping only (skip parsing/sending)', false)
-  .action(async (options) => {
-    await runIngest(options);
-  });
-
-program.parse(process.argv);
-
+// Helper Functions
 function showTokenHelp() {
   console.log(chalk.blue.bold('\n=== How to Get Your Authentication Token ===\n'));
 
@@ -248,17 +194,17 @@ async function runIngest(options) {
 
       if (daysLeft < 1) {
         console.log(chalk.yellow(
-          `⚠️  Token expires in ${hoursLeft} hours (${validation.expiresAt.toLocaleString()})\n`
+          `⚠️  Token expires in ${hoursLeft} hours (${validation.expiresAt.toLocaleString()})\n`,
         ));
       } else if (daysLeft < 7) {
         console.log(chalk.yellow(
-          `⚠️  Token expires in ${daysLeft} days (${validation.expiresAt.toLocaleDateString()})\n`
+          `⚠️  Token expires in ${daysLeft} days (${validation.expiresAt.toLocaleDateString()})\n`,
         ));
       }
     }
     const {
       org, repo, ref, path, user, dryRun, verify, skipUserEnrichment,
-      concurrency, batchSize, pollInterval, verbose, userMapping
+      concurrency, batchSize, pollInterval, verbose, userMapping,
     } = options;
 
     // User mapping test mode - skip parsing/sending, just test user mapping
@@ -274,7 +220,7 @@ async function runIngest(options) {
       mediaFromMarkdown: 0,
       totalMediaFound: 0,
       batchesSent: 0,
-      errors: 0
+      errors: 0,
     };
 
     if (dryRun) {
@@ -314,12 +260,12 @@ async function runIngest(options) {
           if (isMediaFile(resource.path)) {
             const entry = {
               action: 'add',
-              path: resource.path
+              path: resource.path,
             };
 
             // Don't add user here - will be enriched later
             allEntries.push(entry);
-            stats.standaloneMediaFound += 1; // eslint-disable-line no-plusplus
+            stats.standaloneMediaFound += 1;
 
             if (verbose) {
               console.log(chalk.gray(`  ${resource.path}: standalone media`));
@@ -328,7 +274,7 @@ async function runIngest(options) {
             const markdown = await fetchMarkdown(org, repo, ref, resource.path, token);
             const entries = extractMediaReferences(markdown, resource.path, org, repo, ref);
 
-            stats.markdownPagesProcessed += 1; // eslint-disable-line no-plusplus
+            stats.markdownPagesProcessed += 1;
 
             if (entries.length > 0) {
               allEntries.push(...entries);
@@ -343,16 +289,16 @@ async function runIngest(options) {
             }
           }
         } catch (error) {
-          stats.errors += 1; // eslint-disable-line no-plusplus
+          stats.errors += 1;
           if (verbose) {
             console.error(chalk.red(`  ✗ ${resource.path}: ${error.message}`));
           }
         }
-      })
+      }),
     );
 
     spinner.succeed(
-      `Parsed ${stats.markdownPagesProcessed} markdown pages, found ${stats.standaloneMediaFound} standalone media`
+      `Parsed ${stats.markdownPagesProcessed} markdown pages, found ${stats.standaloneMediaFound} standalone media`,
     );
     stats.totalMediaFound = allEntries.length;
 
@@ -362,14 +308,22 @@ async function runIngest(options) {
     }
 
     console.log(chalk.green(
-      `\n✓ Total media: ${allEntries.length} (${stats.standaloneMediaFound} standalone + ${stats.mediaFromMarkdown} from markdown)`
+      `\n✓ Total media: ${allEntries.length} (${stats.standaloneMediaFound} standalone + ${stats.mediaFromMarkdown} from markdown)`,
     ));
 
     // Enrich entries with user information from preview logs
     if (!dryRun && !skipUserEnrichment) {
       spinner.start('Enriching entries with user information from preview logs...');
       try {
-        const enrichedEntries = await enrichEntriesWithUser(allEntries, org, repo, ref, token, user, verbose);
+        const enrichedEntries = await enrichEntriesWithUser(
+          allEntries,
+          org,
+          repo,
+          ref,
+          token,
+          user,
+          verbose,
+        );
         allEntries.length = 0;
         allEntries.push(...enrichedEntries);
 
@@ -385,7 +339,7 @@ async function runIngest(options) {
       }
     } else if (skipUserEnrichment) {
       console.log(chalk.gray(
-        '\n⏭️  Skipping user enrichment (--skip-user-enrichment flag set)\n'
+        '\n⏭️  Skipping user enrichment (--skip-user-enrichment flag set)\n',
       ));
     }
 
@@ -393,7 +347,7 @@ async function runIngest(options) {
     console.log(chalk.gray(`Sending ${batches.length} batches...\n`));
     const estimatedTime = Math.ceil(batches.length / 10);
     console.log(chalk.yellow(
-      `⏱️  Rate limit: 10 requests per second (estimated time: ~${estimatedTime} seconds)\n`
+      `⏱️  Rate limit: 10 requests per second (estimated time: ~${estimatedTime} seconds)\n`,
     ));
 
     // Wait 2s to let rate limit recover after markdown fetching
@@ -410,10 +364,12 @@ async function runIngest(options) {
       setTimeout(resolve, ms);
     });
 
+    // Note: Sequential processing with await-in-loop is intentional here
+    // to respect API rate limits (10 req/sec = 100ms between requests)
     for (const [index, batch] of batches.entries()) {
       try {
         await sendMediaLogBatch(org, repo, ref, batch, token, dryRun);
-        stats.batchesSent += 1; // eslint-disable-line no-plusplus
+        stats.batchesSent += 1;
 
         if (verbose) {
           spinner.text = `Sent batch ${index + 1}/${batches.length}`;
@@ -424,7 +380,7 @@ async function runIngest(options) {
           await sleep(100);
         }
       } catch (error) {
-        stats.errors += 1; // eslint-disable-line no-plusplus
+        stats.errors += 1;
         await saveFailedBatch(batch, error);
         if (verbose) {
           console.error(chalk.red(`\n  ✗ Batch ${index + 1} failed: ${error.message}`));
@@ -455,7 +411,8 @@ async function runIngest(options) {
 
     if (!dryRun && stats.batchesSent > 0) {
       console.log(chalk.green('\n✓ Entries successfully sent to media log'));
-      console.log(chalk.gray(`  Query: ${chalk.cyan(`https://admin.hlx.page/medialog/${org}/${repo}/${ref}?limit=100`)}`));
+      const queryUrl = `https://admin.hlx.page/medialog/${org}/${repo}/${ref}?limit=100`;
+      console.log(chalk.gray(`  Query: ${chalk.cyan(queryUrl)}`));
     }
   } catch (error) {
     spinner.fail('Error');
@@ -463,3 +420,59 @@ async function runIngest(options) {
     process.exit(1);
   }
 }
+
+// CLI Setup
+const program = new Command();
+
+program
+  .name('logmedia')
+  .version('1.0.0')
+  .description('Retroactively populate AEM media log')
+  .addHelpText('after', `
+Examples:
+  $ logmedia --org myorg --repo myrepo
+  $ logmedia --org myorg --repo myrepo --token YOUR_TOKEN
+  $ logmedia --org myorg --repo myrepo --dry-run --verbose
+  $ logmedia --org myorg --repo myrepo --skip-user-enrichment
+  $ logmedia --org myorg --repo myrepo --user-mapping --verbose
+
+User Enrichment:
+  By default, the tool enriches media entries with user information from preview logs.
+  This requires the token to have 'log:read' permission (part of 'author' role or higher).
+  Use --skip-user-enrichment to disable this feature if your token lacks log permissions.
+
+Getting a token:
+  Run 'logmedia token' for instructions on obtaining an authentication token
+`);
+
+// Token help command
+program
+  .command('token')
+  .description('Show how to get authentication token')
+  .action(() => {
+    showTokenHelp();
+  });
+
+// Main ingest command (default)
+program
+  .command('ingest', { isDefault: true })
+  .description('Ingest media references into AEM media log')
+  .requiredOption('--org <org>', 'Organization name')
+  .requiredOption('--repo <repo>', 'Repository name')
+  .option('--ref <ref>', 'Git reference (branch)', 'main')
+  .option('--path <path>', 'Path filter (e.g., /products/*)', '/*')
+  .option('--token <token>', 'Admin JWT token (or use ADMIN_TOKEN env var)')
+  .option('--user <user>', 'User identifier for log entries')
+  .option('--dry-run', 'Run without sending to API', false)
+  .option('--verify', 'Verify entries after sending', false)
+  .option('--skip-user-enrichment', 'Skip user enrichment from preview logs', false)
+  .option('--concurrency <n>', 'Parallel markdown fetching', '3')
+  .option('--batch-size <n>', 'Entries per batch (max 10)', '10')
+  .option('--poll-interval <ms>', 'Job polling interval', '10000')
+  .option('--verbose', 'Detailed logging', false)
+  .option('--user-mapping', 'Test user mapping only (skip parsing/sending)', false)
+  .action(async (options) => {
+    await runIngest(options);
+  });
+
+program.parse(process.argv);

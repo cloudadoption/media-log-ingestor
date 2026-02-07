@@ -31,7 +31,7 @@ export function extractMediaReferences(markdown, sourcePath, org, repo, ref) {
     const entry = {
       action: 'add',
       path,
-      sourcePath: sourceUrl
+      sourcePath: sourceUrl,
     };
 
     // Only include alt if there's actual alt text content
@@ -42,26 +42,31 @@ export function extractMediaReferences(markdown, sourcePath, org, repo, ref) {
     mediaRefs.push(entry);
   };
 
-  let match;
-
-  /* eslint-disable no-cond-assign */
-  while ((match = MARKDOWN_REFERENCE_DEFINITION_REGEX.exec(markdown)) !== null) {
+  // Extract reference definitions
+  let match = MARKDOWN_REFERENCE_DEFINITION_REGEX.exec(markdown);
+  while (match !== null) {
     const [, refId, url, title] = match;
     references.set(refId.toLowerCase(), { url: url.trim(), title });
+    match = MARKDOWN_REFERENCE_DEFINITION_REGEX.exec(markdown);
   }
 
+  // Extract inline images
   MARKDOWN_IMAGE_INLINE_REGEX.lastIndex = 0;
-  while ((match = MARKDOWN_IMAGE_INLINE_REGEX.exec(markdown)) !== null) {
+  match = MARKDOWN_IMAGE_INLINE_REGEX.exec(markdown);
+  while (match !== null) {
     const [, altText, url, title] = match;
     if (url && url.trim()) {
       // Prefer title over alt text from brackets
       const finalAlt = title || altText;
       addMedia(url, finalAlt);
     }
+    match = MARKDOWN_IMAGE_INLINE_REGEX.exec(markdown);
   }
 
+  // Extract reference-style images
   MARKDOWN_IMAGE_REFERENCE_REGEX.lastIndex = 0;
-  while ((match = MARKDOWN_IMAGE_REFERENCE_REGEX.exec(markdown)) !== null) {
+  match = MARKDOWN_IMAGE_REFERENCE_REGEX.exec(markdown);
+  while (match !== null) {
     const [, altText, refId] = match;
     const reference = references.get(refId.toLowerCase());
     if (reference) {
@@ -69,16 +74,19 @@ export function extractMediaReferences(markdown, sourcePath, org, repo, ref) {
       const finalAlt = reference.title || altText;
       addMedia(reference.url, finalAlt);
     }
+    match = MARKDOWN_IMAGE_REFERENCE_REGEX.exec(markdown);
   }
 
+  // Extract non-image media from links
   MARKDOWN_LINK_REGEX.lastIndex = 0;
-  while ((match = MARKDOWN_LINK_REGEX.exec(markdown)) !== null) {
+  match = MARKDOWN_LINK_REGEX.exec(markdown);
+  while (match !== null) {
     const [, , url] = match;
     if (isNonImageMedia(url)) {
       addMedia(url);
     }
+    match = MARKDOWN_LINK_REGEX.exec(markdown);
   }
-  /* eslint-enable no-cond-assign */
 
   return mediaRefs;
 }

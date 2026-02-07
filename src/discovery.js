@@ -9,12 +9,12 @@ export async function createBulkStatusJob(org, site, ref, pathFilter, token) {
     method: 'POST',
     headers: {
       Authorization: `token ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       paths: [pathFilter || '/*'],
-      select: ['preview']
-    })
+      select: ['preview'],
+    }),
   });
 
   if (!response.ok) {
@@ -30,15 +30,15 @@ export async function createBulkStatusJob(org, site, ref, pathFilter, token) {
 
   return {
     jobId: data.job.name,
-    jobUrl: data.links?.self
+    jobUrl: data.links?.self,
   };
 }
 
 export async function pollJobStatus(jobUrl, token, pollInterval, onProgress) {
   const response = await fetch(jobUrl, {
     headers: {
-      Authorization: `token ${token}`
-    }
+      Authorization: `token ${token}`,
+    },
   });
 
   if (!response.ok) {
@@ -65,8 +65,8 @@ export async function getJobDetails(jobUrl, token) {
   const detailsUrl = `${jobUrl}/details`;
   const response = await fetch(detailsUrl, {
     headers: {
-      Authorization: `token ${token}`
-    }
+      Authorization: `token ${token}`,
+    },
   });
 
   if (!response.ok) {
@@ -91,8 +91,8 @@ export async function fetchMarkdown(org, site, ref, resourcePath, token) {
 
   const response = await fetch(url, {
     headers: {
-      Authorization: `token ${token}`
-    }
+      Authorization: `token ${token}`,
+    },
   });
 
   if (!response.ok) {
@@ -105,13 +105,13 @@ export async function fetchMarkdown(org, site, ref, resourcePath, token) {
 const MEDIA_EXTENSIONS = [
   '.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.svg',
   '.mp4', '.mov', '.webm', '.avi', '.m4v', '.mkv',
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
 ];
 
 const IGNORE_EXTENSIONS = [
   '.json', '.yaml', '.yml', '.xml', '.txt', '.csv',
   '.js', '.css', '.html', '.ico',
-  '.zip', '.tar', '.gz'
+  '.zip', '.tar', '.gz',
 ];
 
 export function isMediaFile(path) {

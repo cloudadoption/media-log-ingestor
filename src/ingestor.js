@@ -4,7 +4,15 @@ import fs from 'fs/promises';
 const MEDIALOG_API = 'https://admin.hlx.page/medialog';
 const LOG_API = 'https://admin.hlx.page/log';
 
-export async function sendMediaLogBatch(org, repo, ref, entries, token, dryRun = false, maxRetries = 3) {
+export async function sendMediaLogBatch(
+  org,
+  repo,
+  ref,
+  entries,
+  token,
+  dryRun = false,
+  maxRetries = 3,
+) {
   if (dryRun) {
     return { success: true, dryRun: true, status: 200 };
   }
@@ -14,30 +22,32 @@ export async function sendMediaLogBatch(org, repo, ref, entries, token, dryRun =
     setTimeout(resolve, ms);
   });
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  // Retry loop: Sequential await is intentional for exponential backoff
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `token ${token}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ entries })
+      body: JSON.stringify({ entries }),
     });
 
     if (response.ok) {
       return { success: true, status: response.status };
     }
 
-    // Handle rate limiting (403 or 429)
-    if ((response.status === 403 || response.status === 429) && attempt < maxRetries) {
+    // Handle rate limiting (403 or 429) - retry with exponential backoff
+    const isRateLimited = response.status === 403 || response.status === 429;
+    const isRetryable = isRateLimited && attempt < maxRetries;
+    if (isRetryable) {
       const backoffMs = 2 ** attempt * 1000; // 1s, 2s, 4s
       await sleep(backoffMs);
-      continue;
+    } else {
+      // Non-retryable error or max retries exceeded
+      const text = await response.text();
+      throw new Error(`Media log API error: ${response.status} - ${text}`);
     }
-
-    // Non-retryable error or max retries exceeded
-    const text = await response.text();
-    throw new Error(`Media log API error: ${response.status} - ${text}`);
   }
 
   // This should never be reached due to throw, but ESLint requires it
@@ -49,8 +59,8 @@ export async function verifyMediaLog(org, repo, ref, token, limit = 10) {
 
   const response = await fetch(url, {
     headers: {
-      Authorization: `token ${token}`
-    }
+      Authorization: `token ${token}`,
+    },
   });
 
   if (!response.ok) {
@@ -60,7 +70,7 @@ export async function verifyMediaLog(org, repo, ref, token, limit = 10) {
   const data = await response.json();
   return {
     count: data.entries?.length || 0,
-    entries: data.entries || []
+    entries: data.entries || [],
   };
 }
 
@@ -68,7 +78,7 @@ export async function saveFailedBatch(batch, error, filename = 'failed-entries.j
   const failedEntry = {
     timestamp: new Date().toISOString(),
     error: error.message,
-    entries: batch
+    entries: batch,
   };
 
   try {
@@ -111,12 +121,12 @@ export async function buildPreviewUserMap(org, repo, ref, token, verbose = false
       console.log(`  API URL: ${url}`);
     }
 
-    // Fetch all log pages (handle pagination)
+    // Pagination loop: Sequential await is intentional for paginated API responses
     while (hasMore) {
       const response = await fetch(url, {
         headers: {
-          Authorization: `token ${token}`
-        }
+          Authorization: `token ${token}`,
+        },
       });
 
       if (!response.ok) {
@@ -141,7 +151,7 @@ export async function buildPreviewUserMap(org, repo, ref, token, verbose = false
 
       const data = await response.json();
       const entries = data.entries || [];
-      pageCount += 1; // eslint-disable-line no-plusplus
+      pageCount += 1;
       totalEntries += entries.length;
 
       if (verbose && pageCount === 1) {
@@ -205,7 +215,15 @@ export async function buildPreviewUserMap(org, repo, ref, token, verbose = false
  * @param {boolean} verbose - Enable verbose logging
  * @returns {Promise<Array>} Enriched entries with user information
  */
-export async function enrichEntriesWithUser(entries, org, repo, ref, token, fallbackUser, verbose = false) {
+export async function enrichEntriesWithUser(
+  entries,
+  org,
+  repo,
+  ref,
+  token,
+  fallbackUser,
+  verbose = false,
+) {
   // Build map of path -> user from preview logs (single bulk fetch)
   const previewUserMap = await buildPreviewUserMap(org, repo, ref, token, verbose);
 
@@ -234,12 +252,12 @@ export async function enrichEntriesWithUser(entries, org, repo, ref, token, fall
 
         if (user) {
           enriched.user = user;
-          foundUsers += 1; // eslint-disable-line no-plusplus
+          foundUsers += 1;
         } else if (fallbackUser) {
           enriched.user = fallbackUser;
-          usedFallback += 1; // eslint-disable-line no-plusplus
+          usedFallback += 1;
         } else {
-          noUser += 1; // eslint-disable-line no-plusplus
+          noUser += 1;
         }
       } else {
         if (verbose && index < 3) {
@@ -247,17 +265,17 @@ export async function enrichEntriesWithUser(entries, org, repo, ref, token, fall
         }
         if (fallbackUser) {
           enriched.user = fallbackUser;
-          usedFallback += 1; // eslint-disable-line no-plusplus
+          usedFallback += 1;
         } else {
-          noUser += 1; // eslint-disable-line no-plusplus
+          noUser += 1;
         }
       }
     } else if (fallbackUser) {
       // No sourcePath (standalone media), use fallback user
       enriched.user = fallbackUser;
-      usedFallback += 1; // eslint-disable-line no-plusplus
+      usedFallback += 1;
     } else {
-      noUser += 1; // eslint-disable-line no-plusplus
+      noUser += 1;
     }
 
     return enriched;
@@ -281,7 +299,7 @@ export function generateReport(stats) {
     mediaFromMarkdown,
     totalMediaFound,
     batchesSent,
-    errors
+    errors,
   } = stats;
 
   return `
