@@ -102,10 +102,13 @@ export async function fetchMarkdown(org, site, ref, resourcePath, token) {
   return response.text();
 }
 
+// Media types supported by the medialog API
+// Note: SVGs and documents (PDF, DOC, etc.) are tracked in content bus (audit logs), not medialog
 const MEDIA_EXTENSIONS = [
-  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.svg',
+  // Raster images
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif',
+  // Videos
   '.mp4', '.mov', '.webm', '.avi', '.m4v', '.mkv',
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
 ];
 
 const IGNORE_EXTENSIONS = [

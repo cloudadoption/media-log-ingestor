@@ -234,17 +234,17 @@ export async function enrichEntriesWithUser(
   const enrichedEntries = entries.map((entry, index) => {
     const enriched = { ...entry };
 
-    // If entry has sourcePath, try to get the user who last previewed that page
-    if (entry.sourcePath) {
-      // Extract path from sourcePath URL (e.g., https://main--repo--org.aem.page/my-page -> /my-page)
-      const urlMatch = entry.sourcePath.match(/\.aem\.page(\/.*?)$/);
+    // If entry has contentSourcePath, try to get the user who last previewed that page
+    if (entry.contentSourcePath) {
+      // Extract path from contentSourcePath URL (e.g., https://main--repo--org.aem.page/my-page -> /my-page)
+      const urlMatch = entry.contentSourcePath.match(/\.aem\.page(\/.*?)$/);
       if (urlMatch) {
         const sourcePath = urlMatch[1];
         const user = previewUserMap.get(sourcePath);
 
         if (verbose && index < 3) {
           console.log(`\n  Entry ${index + 1}:`);
-          console.log(`    sourcePath: ${entry.sourcePath}`);
+          console.log(`    contentSourcePath: ${entry.contentSourcePath}`);
           console.log(`    extracted path: ${sourcePath}`);
           console.log(`    found user: ${user || 'none'}`);
           console.log(`    fallback user: ${fallbackUser || 'none'}`);
@@ -261,7 +261,7 @@ export async function enrichEntriesWithUser(
         }
       } else {
         if (verbose && index < 3) {
-          console.log(`\n  Entry ${index + 1}: Failed to extract path from ${entry.sourcePath}`);
+          console.log(`\n  Entry ${index + 1}: Failed to extract path from ${entry.contentSourcePath}`);
         }
         if (fallbackUser) {
           enriched.user = fallbackUser;
@@ -271,7 +271,7 @@ export async function enrichEntriesWithUser(
         }
       }
     } else if (fallbackUser) {
-      // No sourcePath (standalone media), use fallback user
+      // No contentSourcePath (standalone media), use fallback user
       enriched.user = fallbackUser;
       usedFallback += 1;
     } else {

@@ -13,7 +13,9 @@ import {
   shouldProcessResource,
   isMediaFile,
 } from './discovery.js';
-import { extractMediaReferences, batchEntries } from './parser.js';
+import {
+  extractMediaReferences, batchEntries, getContentType, extractDimensions, extractMediaHash,
+} from './parser.js';
 import {
   sendMediaLogBatch, saveFailedBatch, generateReport, verifyMediaLog, enrichEntriesWithUser,
 } from './ingestor.js';
@@ -259,9 +261,25 @@ async function runIngest(options) {
         try {
           if (isMediaFile(resource.path)) {
             const entry = {
-              action: 'add',
+              owner: org,
+              repo,
+              operation: 'ingest',
               path: resource.path,
+              contentSourceType: 'markup',
             };
+
+            // Add content type if we can determine it
+            const contentType = getContentType(resource.path);
+            if (contentType) {
+              entry.contentType = contentType;
+            }
+
+            // Extract width and height from URL fragment if present
+            const dimensions = extractDimensions(resource.path);
+            if (dimensions) {
+              entry.width = dimensions.width;
+              entry.height = dimensions.height;
+            }
 
             // Don't add user here - will be enriched later
             allEntries.push(entry);
@@ -310,6 +328,47 @@ async function runIngest(options) {
     console.log(chalk.green(
       `\n✓ Total media: ${allEntries.length} (${stats.standaloneMediaFound} standalone + ${stats.mediaFromMarkdown} from markdown)`,
     ));
+
+    // Apply deduplication: first occurrence is "ingest", subsequent are "reuse"
+    spinner.start('Applying deduplication logic...');
+    const seenHashes = new Set();
+    let ingestCount = 0;
+    let reuseCount = 0;
+
+    const deduplicatedEntries = allEntries.map((entry) => {
+      const hash = extractMediaHash(entry.path);
+      let operation = 'ingest';
+
+      if (hash) {
+        if (seenHashes.has(hash)) {
+          operation = 'reuse';
+          reuseCount += 1;
+        } else {
+          seenHashes.add(hash);
+          operation = 'ingest';
+          ingestCount += 1;
+        }
+      } else {
+        // No hash found (shouldn't happen for media URLs, but keep as ingest)
+        operation = 'ingest';
+        ingestCount += 1;
+      }
+
+      return { ...entry, operation };
+    });
+
+    spinner.succeed(
+      `Deduplication complete: ${ingestCount} unique media (ingest), ${reuseCount} reuses`,
+    );
+
+    if (verbose && reuseCount > 0) {
+      console.log(chalk.gray(`  Found ${seenHashes.size} unique media hashes`));
+      console.log(chalk.gray(`  ${reuseCount} entries marked as "reuse"`));
+    }
+
+    // Replace allEntries with deduplicated entries
+    allEntries.length = 0;
+    allEntries.push(...deduplicatedEntries);
 
     // Enrich entries with user information from preview logs
     if (!dryRun && !skipUserEnrichment) {
@@ -399,7 +458,9 @@ async function runIngest(options) {
         if (verbose && result.entries.length > 0) {
           console.log(chalk.gray('\nRecent entries (sample):'));
           result.entries.slice(0, 5).forEach((entry) => {
-            console.log(chalk.gray(`  ${entry.action} | ${entry.path} | ${entry.sourcePath || 'N/A'}`));
+            const op = entry.operation || 'N/A';
+            const src = entry.originalFilename || 'N/A';
+            console.log(chalk.gray(`  ${op} | ${src} | ${entry.user || 'N/A'}`));
           });
         }
       } catch (error) {

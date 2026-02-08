@@ -56,11 +56,13 @@ logmedia --org franklin --repo my-site --dry-run --verbose
 logmedia --org franklin --repo my-site --user-mapping --verbose
 ```
 
-### Skip User Enrichment
+### Skip User Enrichment (Not Recommended)
+
+⚠️ **Warning**: Skipping user enrichment results in less accurate tracking for `"reuse"` operations. All entries will use the same fallback user.
 
 ```bash
-# Run ingestion without enriching entries with user information
-logmedia --org franklin --repo my-site --skip-user-enrichment
+# Only use if token lacks log:read permission
+logmedia ingest --org franklin --repo my-site --skip-user-enrichment --user backup-bot
 ```
 
 ## Options
@@ -75,7 +77,7 @@ logmedia --org franklin --repo my-site --skip-user-enrichment
 | `--user` | Fallback user identifier for log entries | (omitted) |
 | `--dry-run` | Preview without sending to API | `false` |
 | `--verify` | Verify entries after sending | `false` |
-| `--skip-user-enrichment` | Skip enriching entries with preview log users | `false` |
+| `--skip-user-enrichment` | Skip user enrichment (⚠️ not recommended, use only if token lacks log:read) | `false` |
 | `--user-mapping` | Test user mapping only (no ingestion) | `false` |
 | `--verbose` | Detailed logging | `false` |
 | `--concurrency` | Parallel markdown fetching | `3` |
@@ -154,9 +156,12 @@ logmedia --org franklin --repo my-site
 
 Priority: `--token` flag > `ADMIN_TOKEN` env variable
 
-## User Enrichment
+## User Enrichment (Recommended)
 
-By default, the tool enriches media log entries with user information from preview logs. This helps track who last previewed/worked on each page containing the media.
+**User enrichment is enabled by default** and is essential for accurate tracking, especially with deduplication:
+- Each `"ingest"` or `"reuse"` operation is attributed to the user who last previewed the source page
+- For sites with multiple contributors, this provides accurate usage tracking
+- Without user enrichment, all entries use the same fallback user, losing valuable information
 
 ### How It Works
 
@@ -177,9 +182,10 @@ If your token doesn't have `log:read` permissions, you'll see:
 - `403 Forbidden` errors when fetching preview logs
 - Warning: "User enrichment completed but no users found"
 
-**Options:**
-1. Use `--skip-user-enrichment` to disable the feature
-2. Provide `--user` fallback value for all entries
+**Solutions:**
+1. Get a token with proper permissions (recommended)
+2. Use `--skip-user-enrichment` to disable the feature (⚠️ not recommended - results in less accurate tracking)
+3. Provide `--user` fallback value for all entries
 3. Get a token with "author" role or higher
 
 ### Testing User Mapping
@@ -201,10 +207,11 @@ This will:
 1. **Creates bulk status job** via AEM Admin API to discover all pages
 2. **Polls job** until complete (handles large sites with 1000+ pages)
 3. **Fetches markdown** for each page from preview partition
-4. **Extracts media** references (images, videos, documents)
-5. **Enriches with user info** from preview logs (if not skipped)
-6. **Batches entries** (max 10 per request) with `action: "add"`
-7. **Sends to media log API** for ingestion
+4. **Extracts media** references (images, videos) from markdown
+5. **Deduplicates** entries - first occurrence marked as `"ingest"`, subsequent as `"reuse"`
+6. **Enriches with user info** from preview logs (if not skipped)
+7. **Batches entries** (max 10 per request)
+8. **Sends to media log API** for ingestion
 
 ## Output
 
@@ -257,33 +264,49 @@ The tool displays:
 
 ### Log Entry Structure
 
-**For media referenced in markdown pages:**
+**Entry format sent to medialog API:**
 ```json
 {
-  "action": "add",
-  "path": "https://main--repo--org.aem.page/media_abc123.png",
-  "sourcePath": "https://main--repo--org.aem.page/products/page",
+  "owner": "kmurugulla",
+  "repo": "brightpath",
+  "operation": "ingest",
+  "path": "https://main--brightpath--kmurugulla.aem.page/media_abc123.png#width=1600&height=900",
+  "contentType": "image/png",
+  "contentSourceType": "markup",
+  "contentSourcePath": "https://main--brightpath--kmurugulla.aem.page/products/page",
+  "width": "1600",
+  "height": "900",
   "alt": "Product screenshot",
-  "user": "media-backfill-bot"
+  "user": "user@example.com"
 }
 ```
 
-**For standalone media files:**
-```json
-{
-  "action": "add",
-  "path": "/icons/logo.svg",
-  "user": "media-backfill-bot"
-}
-```
-
-**Fields:**
-- `action`: Always "add"
-- `path`: The media file path or URL
-- `sourcePath`: Full URL to the markdown page that references this media (omitted for standalone media files)
-- `alt`: Alternative text for images (only included if alt text is present in markdown)
+**Fields sent by this tool:**
+- `owner`: Organization name
+- `repo`: Repository name
+- `operation`: Type of operation
+  - `"ingest"` - First occurrence of a media hash (unique media)
+  - `"reuse"` - Subsequent uses of the same media hash (media used on multiple pages)
+  - Deduplication is applied across all discovered entries before sending to API
+- `path`: The media file path with dimensions fragment (e.g., `#width=1600&height=900`)
+- `contentType`: MIME type inferred from file extension (e.g., `image/jpeg`, `video/mp4`)
+- `contentSourceType`: Source type - `"markup"` for media referenced from markdown or standalone media
+- `contentSourcePath`: Full URL to the markdown page that references this media (optional, omitted for standalone media)
+- `width`: Media width extracted from URL fragment (optional, only if fragment present)
+- `height`: Media height extracted from URL fragment (optional, only if fragment present)
+- `alt`: Alternative text for images (optional, only included if alt text is present in markdown)
 - `user`: User who last previewed the source page (from preview logs), or fallback to `--user` flag value
-- `timestamp`: Automatically added by the API
+
+**What the API enriches/adds:**
+- `mediaHash`: Content hash of the media file (calculated from content)
+- `timestamp`: When the entry was created
+- `originalFilename`: Original source path from content metadata
+- Note: If `width`/`height` are not provided, the API will fetch the media and extract dimensions
+
+**Supported Media Types:**
+- Raster images: JPG, PNG, GIF, WebP, AVIF
+- Videos: MP4, MOV, WebM, AVI, M4V, MKV
+- **Not supported**: SVGs and documents (PDF, DOC, etc.) are tracked in content bus audit logs, not medialog
 
 ## Error Handling
 

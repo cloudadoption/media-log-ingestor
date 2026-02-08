@@ -8,6 +8,48 @@ const MARKDOWN_IMAGE_REFERENCE_REGEX = /!\[([^\]]*)\]\[([^\]]+)\]/g;
 const MARKDOWN_REFERENCE_DEFINITION_REGEX = /^\[([^\]]+)\]:\s*([^\s"]+)(?:\s+"([^"]+)")?$/gm;
 const MARKDOWN_LINK_REGEX = /\[([^\]]*)\]\(([^\s"')]+)(?:\s+"([^"]+)")?\)/g;
 
+// Content type mappings for medialog API
+const CONTENT_TYPE_MAP = {
+  // Raster images
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  // Videos
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
+  '.avi': 'video/x-msvideo',
+  '.m4v': 'video/x-m4v',
+  '.mkv': 'video/x-matroska',
+};
+
+export function getContentType(url) {
+  const lowerUrl = url.toLowerCase();
+  const ext = Object.keys(CONTENT_TYPE_MAP).find((e) => lowerUrl.includes(e));
+  return ext ? CONTENT_TYPE_MAP[ext] : null;
+}
+
+// Extract width and height from URL fragment (#width=X&height=Y)
+export function extractDimensions(url) {
+  const match = url.match(/#width=(\d+)&height=(\d+)/);
+  if (match) {
+    return {
+      width: match[1],
+      height: match[2],
+    };
+  }
+  return null;
+}
+
+// Extract media hash from URL (e.g., media_abc123def.jpg -> abc123def)
+export function extractMediaHash(url) {
+  const match = url.match(/media_([a-f0-9]+)\./);
+  return match ? match[1] : null;
+}
+
 function isNonImageMedia(url) {
   const lowerUrl = url.toLowerCase();
 
@@ -21,18 +63,36 @@ export function extractMediaReferences(markdown, sourcePath, org, repo, ref) {
   const seen = new Set();
   const references = new Map();
 
-  // Convert path to full URL for sourcePath
+  // Convert path to full URL for contentSourcePath
   const sourceUrl = `https://${ref}--${repo}--${org}.aem.page${sourcePath}`;
 
   const addMedia = (path, altText = '') => {
     if (seen.has(path)) return;
     seen.add(path);
 
+    // Operation types: 'ingest' (initial add), 'reuse' (used again), 'remove' (deleted)
+    // For retroactive backfill, we use 'ingest'
     const entry = {
-      action: 'add',
+      owner: org,
+      repo,
+      operation: 'ingest',
       path,
-      sourcePath: sourceUrl,
+      contentSourcePath: sourceUrl,
+      contentSourceType: 'markup',
     };
+
+    // Add content type if we can determine it
+    const contentType = getContentType(path);
+    if (contentType) {
+      entry.contentType = contentType;
+    }
+
+    // Extract width and height from URL fragment if present
+    const dimensions = extractDimensions(path);
+    if (dimensions) {
+      entry.width = dimensions.width;
+      entry.height = dimensions.height;
+    }
 
     // Only include alt if there's actual alt text content
     if (altText && altText.trim()) {
