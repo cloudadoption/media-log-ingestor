@@ -234,44 +234,30 @@ export async function enrichEntriesWithUser(
   const enrichedEntries = entries.map((entry, index) => {
     const enriched = { ...entry };
 
-    // If entry has contentSourcePath, try to get the user who last previewed that page
-    if (entry.contentSourcePath) {
-      // Extract path from contentSourcePath URL (e.g., https://main--repo--org.aem.page/my-page -> /my-page)
-      const urlMatch = entry.contentSourcePath.match(/\.aem\.page(\/.*?)$/);
-      if (urlMatch) {
-        const sourcePath = urlMatch[1];
-        const user = previewUserMap.get(sourcePath);
+    // If entry has resourcePath, try to get the user who last previewed that page
+    if (entry.resourcePath) {
+      // resourcePath is already just the path (e.g., /drafts/page.md)
+      const sourcePath = entry.resourcePath;
+      const user = previewUserMap.get(sourcePath);
 
-        if (verbose && index < 3) {
-          console.log(`\n  Entry ${index + 1}:`);
-          console.log(`    contentSourcePath: ${entry.contentSourcePath}`);
-          console.log(`    extracted path: ${sourcePath}`);
-          console.log(`    found user: ${user || 'none'}`);
-          console.log(`    fallback user: ${fallbackUser || 'none'}`);
-        }
+      if (verbose && index < 3) {
+        console.log(`\n  Entry ${index + 1}:`);
+        console.log(`    resourcePath: ${entry.resourcePath}`);
+        console.log(`    found user: ${user || 'none'}`);
+        console.log(`    fallback user: ${fallbackUser || 'none'}`);
+      }
 
-        if (user) {
-          enriched.user = user;
-          foundUsers += 1;
-        } else if (fallbackUser) {
-          enriched.user = fallbackUser;
-          usedFallback += 1;
-        } else {
-          noUser += 1;
-        }
+      if (user) {
+        enriched.user = user;
+        foundUsers += 1;
+      } else if (fallbackUser) {
+        enriched.user = fallbackUser;
+        usedFallback += 1;
       } else {
-        if (verbose && index < 3) {
-          console.log(`\n  Entry ${index + 1}: Failed to extract path from ${entry.contentSourcePath}`);
-        }
-        if (fallbackUser) {
-          enriched.user = fallbackUser;
-          usedFallback += 1;
-        } else {
-          noUser += 1;
-        }
+        noUser += 1;
       }
     } else if (fallbackUser) {
-      // No contentSourcePath (standalone media), use fallback user
+      // No resourcePath (standalone media), use fallback user
       enriched.user = fallbackUser;
       usedFallback += 1;
     } else {

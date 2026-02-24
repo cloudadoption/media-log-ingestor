@@ -290,7 +290,7 @@ async function runIngest(options) {
             }
           } else {
             const markdown = await fetchMarkdown(org, repo, ref, resource.path, token);
-            const entries = extractMediaReferences(markdown, resource.path, org, repo, ref);
+            const entries = extractMediaReferences(markdown, resource.path, org, repo);
 
             stats.markdownPagesProcessed += 1;
 
