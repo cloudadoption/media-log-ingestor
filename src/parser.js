@@ -1,5 +1,4 @@
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm', '.avi', '.m4v', '.mkv'];
-const DOC_EXTENSIONS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt'];
 
 // Matches: ![alt](url "title") or ![alt](url)
 // Group 1: alt text, Group 2: url, Group 3: optional title
@@ -50,23 +49,18 @@ export function extractMediaHash(url) {
   return match ? match[1] : null;
 }
 
-function isNonImageMedia(url) {
+// Only videos go to medialog from plain links. PDFs/docs/SVGs use Content Delivery, not Media Bus.
+function isVideoMedia(url) {
   const lowerUrl = url.toLowerCase();
-
-  // Check for video or document extensions (but not images)
-  return VIDEO_EXTENSIONS.some((ext) => lowerUrl.includes(ext))
-         || DOC_EXTENSIONS.some((ext) => lowerUrl.includes(ext));
+  return VIDEO_EXTENSIONS.some((ext) => lowerUrl.includes(ext));
 }
 
-export function extractMediaReferences(markdown, sourcePath, org, repo, ref) {
+export function extractMediaReferences(markdown, sourcePath, org, repo) {
   const mediaRefs = [];
   const seen = new Set();
   const references = new Map();
 
-  // Convert path to full URL for contentSourcePath
-  const sourceUrl = `https://${ref}--${repo}--${org}.aem.page${sourcePath}`;
-
-  const addMedia = (path, altText = '') => {
+  const addMedia = (path) => {
     if (seen.has(path)) return;
     seen.add(path);
 
@@ -77,8 +71,7 @@ export function extractMediaReferences(markdown, sourcePath, org, repo, ref) {
       repo,
       operation: 'ingest',
       path,
-      contentSourcePath: sourceUrl,
-      contentSourceType: 'markup',
+      resourcePath: sourcePath,
     };
 
     // Add content type if we can determine it
@@ -92,11 +85,6 @@ export function extractMediaReferences(markdown, sourcePath, org, repo, ref) {
     if (dimensions) {
       entry.width = dimensions.width;
       entry.height = dimensions.height;
-    }
-
-    // Only include alt if there's actual alt text content
-    if (altText && altText.trim()) {
-      entry.alt = altText.trim();
     }
 
     mediaRefs.push(entry);
@@ -114,11 +102,9 @@ export function extractMediaReferences(markdown, sourcePath, org, repo, ref) {
   MARKDOWN_IMAGE_INLINE_REGEX.lastIndex = 0;
   match = MARKDOWN_IMAGE_INLINE_REGEX.exec(markdown);
   while (match !== null) {
-    const [, altText, url, title] = match;
+    const [, , url] = match;
     if (url && url.trim()) {
-      // Prefer title over alt text from brackets
-      const finalAlt = title || altText;
-      addMedia(url, finalAlt);
+      addMedia(url);
     }
     match = MARKDOWN_IMAGE_INLINE_REGEX.exec(markdown);
   }
@@ -127,22 +113,20 @@ export function extractMediaReferences(markdown, sourcePath, org, repo, ref) {
   MARKDOWN_IMAGE_REFERENCE_REGEX.lastIndex = 0;
   match = MARKDOWN_IMAGE_REFERENCE_REGEX.exec(markdown);
   while (match !== null) {
-    const [, altText, refId] = match;
+    const [, , refId] = match;
     const reference = references.get(refId.toLowerCase());
     if (reference) {
-      // Prefer reference title over alt text from brackets
-      const finalAlt = reference.title || altText;
-      addMedia(reference.url, finalAlt);
+      addMedia(reference.url);
     }
     match = MARKDOWN_IMAGE_REFERENCE_REGEX.exec(markdown);
   }
 
-  // Extract non-image media from links
+  // Extract video links only (images are from ![]() above). PDFs/docs/SVGs are Content Delivery, not medialog.
   MARKDOWN_LINK_REGEX.lastIndex = 0;
   match = MARKDOWN_LINK_REGEX.exec(markdown);
   while (match !== null) {
     const [, , url] = match;
-    if (isNonImageMedia(url)) {
+    if (isVideoMedia(url)) {
       addMedia(url);
     }
     match = MARKDOWN_LINK_REGEX.exec(markdown);
